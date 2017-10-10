@@ -1,0 +1,13 @@
+name: ThaneSurvival
+author: Thane
+main: org.thane.ThaneSurvival
+version: 0.1
+commands:
+   surv:
+      description: Discover the crafting methods and tools you can use using this plugin.
+      usage: Craft The Wizard's instructional book using a piece of quartz and leather.
+      permission: ThaneSurvival.surv
+   switch:
+      description: Op tool to switch between gamemodes
+      usage: /switch
+      permission: ThaneSurvival.switch
