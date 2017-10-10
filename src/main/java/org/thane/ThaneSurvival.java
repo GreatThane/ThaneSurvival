@@ -29,8 +29,8 @@ import java.util.Map;
 
 public class ThaneSurvival extends JavaPlugin implements Listener {
 
-    private static ItemStack[] inventory = null;
-    private static File switchInventory = null;
+    private static Map<String, ItemStack[]> inventories = new HashMap<>();
+    private static File inventoryFolder = null;
 
     public static Plugin plugin() {
         return ThaneSurvival.getPlugin(ThaneSurvival.class);
@@ -68,7 +68,17 @@ public class ThaneSurvival extends JavaPlugin implements Listener {
         Surv.loadRecipes();
         CraftHandler.loadRecipes();
 
-        switchInventory = new File(getDataFolder().getAbsolutePath() + "/switchinventory");
+        if (!getDataFolder().exists()) {
+            if (!getDataFolder().mkdir()) {
+
+            }
+        }
+        inventoryFolder = new File(getDataFolder().getAbsolutePath() + "/inventories");
+        if (!inventoryFolder.exists()) {
+            if (!inventoryFolder.mkdir()) {
+                throw new RuntimeException("Could not create folder! " + inventoryFolder.getAbsolutePath());
+            }
+        }
 
         loadInventory();
 
@@ -90,18 +100,25 @@ public class ThaneSurvival extends JavaPlugin implements Listener {
         } else if (command.getName().equalsIgnoreCase("switch")) {
             if (sender instanceof Player) {
 
-                if (((Player) sender).getGameMode().equals(GameMode.CREATIVE)) {
-                    ((Player) sender).setGameMode(GameMode.SURVIVAL);
-                    if (inventory != null) {
-                        ((Player) sender).getInventory().setContents(inventory);
-                    } else {
-                        ((Player) sender).getInventory().clear();
-                    }
-                } else if (((Player) sender).getGameMode().equals(GameMode.SURVIVAL)) {
-                    inventory = ((Player) sender).getInventory().getContents();
-                    ((Player) sender).getInventory().clear();
-                    ((Player) sender).setGameMode(GameMode.CREATIVE);
+                Player player = (Player) sender;
+                String uuid = player.getUniqueId().toString();
+
+                if (player.getGameMode().equals(GameMode.CREATIVE)) {
+                    player.setGameMode(GameMode.SURVIVAL);
+                } else {
+
+                    player.setGameMode(GameMode.CREATIVE);
                 }
+
+                ItemStack[] existingStack = player.getInventory().getContents();
+                ItemStack[] savedStack = inventories.get(uuid);
+                if (savedStack != null) {
+                    player.getInventory().setContents(savedStack);
+                } else {
+                    player.getInventory().clear();
+                }
+                inventories.put(uuid, existingStack);
+
                 return true;
             }
         }
@@ -125,50 +142,51 @@ public class ThaneSurvival extends JavaPlugin implements Listener {
     }
 
     private void loadInventory() {
-        if (!getDataFolder().exists()) {
-            if (!getDataFolder().mkdir()) {
-                throw new RuntimeException("Could not create folder! " + getDataFolder().getAbsolutePath());
-            }
-        }
 
-        try {
-            FileInputStream fileStream = new FileInputStream(switchInventory);
-            ObjectInputStream objectStream = new ObjectInputStream(fileStream);
-            List<Map<String, Object>> input = (List<Map<String, Object>>) objectStream.readObject();
-            ItemStack[] inputStack = new ItemStack[input.size()];
-            for (int i = 0; i < input.size(); i++) {
-                if(input.get(i) == null) {
-                    inputStack[i] = null;
-                } else {
-                    inputStack[i] = ItemStack.deserialize(input.get(i));
+        //Loop through files in inventory folder
+        for (File inventoryFile : inventoryFolder.listFiles()) {
+            try {
+                FileInputStream fileStream = new FileInputStream(inventoryFile);
+                ObjectInputStream objectStream = new ObjectInputStream(fileStream);
+                List<Map<String, Object>> input = (List<Map<String, Object>>) objectStream.readObject();
+                ItemStack[] inputStack = new ItemStack[input.size()];
+                for (int i = 0; i < input.size(); i++) {
+                    if (input.get(i) == null) {
+                        inputStack[i] = null;
+                    } else {
+                        inputStack[i] = ItemStack.deserialize(input.get(i));
+                    }
                 }
+                inventories.put(inventoryFile.getName(), inputStack);
+                getLogger().info("Loaded inventory from " + inventoryFile.getAbsolutePath());
+            } catch (FileNotFoundException fnfe) {
+                // file isn't there, don't load
+            } catch (IOException | ClassNotFoundException e) {
+                throw new RuntimeException(e);
             }
-            inventory = inputStack;
-
-            getLogger().info("Loaded inventory from " + switchInventory.getAbsolutePath());
-        } catch (FileNotFoundException fnfe) {
-            // file isn't there, don't load
-        } catch (IOException | ClassNotFoundException e) {
-            throw new RuntimeException(e);
         }
+
     }
 
     private void saveInventory() {
-        if (inventory != null) {
+        for (Map.Entry<String, ItemStack[]> entry : inventories.entrySet()) {
+            String uuid = entry.getKey();
+            ItemStack[] inventory = entry.getValue();
             try {
+                File userFile = new File(inventoryFolder.toString() + "/" + uuid);
                 List<Map<String, Object>> output = new ArrayList<>();
-                for(ItemStack stack : inventory) {
+                for (ItemStack stack : inventory) {
                     if (stack == null) {
                         output.add(null);
                     } else {
                         output.add(stack.serialize());
                     }
                 }
-                if (switchInventory.exists()) {
-                    switchInventory.createNewFile();
+                if (userFile.exists()) {
+                    userFile.createNewFile();
                 }
 
-                FileOutputStream fileOut = new FileOutputStream(switchInventory, false);
+                FileOutputStream fileOut = new FileOutputStream(userFile, false);
                 ObjectOutputStream oos = new ObjectOutputStream(fileOut);
                 oos.writeObject(output);
             } catch (IOException ioe) {
